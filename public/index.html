@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Steam Games List with Categories and Drag-and-Drop</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        h1 {
+            text-align: center;
+        }
+        .category {
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            width: 30%;
+            min-height: 100px;
+            margin: 10px;
+            padding: 10px;
+            background-color: white;
+            display: inline-block;
+            vertical-align: top;
+        }
+        .game-card {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin: 5px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            cursor: move;
+        }
+        .game-card img {
+            max-width: 100%;
+            border-radius: 5px;
+        }
+        .search-bar, .sort-menu, .pagination-controls {
+            text-align: center;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Steam Games with Categories</h1>
+
+    <div class="category" id="want-to-play" ondrop="drop(event, 'want-to-play')" ondragover="allowDrop(event)">
+        <h2>Want to Play</h2>
+    </div>
+
+    <div class="category" id="playing" ondrop="drop(event, 'playing')" ondragover="allowDrop(event)">
+        <h2>Playing</h2>
+    </div>
+
+    <div class="category" id="finished-playing" ondrop="drop(event, 'finished-playing')" ondragover="allowDrop(event)">
+        <h2>Finished Playing</h2>
+    </div>
+
+    <div class="search-bar">
+        <input type="text" id="search-input" placeholder="Search for games..." oninput="handleSearch()">
+    </div>
+    <div class="sort-menu">
+        <label for="sort-options">Sort by:</label>
+        <select id="sort-options">
+            <option value="name-asc">Alphabetical (A-Z)</option>
+            <option value="name-desc">Alphabetical (Z-A)</option>
+            <option value="release-desc">Newest First</option>
+        </select>
+    </div>
+    <div class="game-list" id="game-list"></div>
+    <div class="pagination-controls">
+        <button id="prev-page" onclick="prevPage()">Previous</button>
+        <span id="page-info">Page 1</span>
+        <button id="next-page" onclick="nextPage()">Next</button>
+    </div>
+
+    <script>
+        let games = [];
+        let filteredGames = [];
+        let currentPage = 1;
+        const gamesPerPage = 10;
+
+        async function fetchGames() {
+            const response = await fetch('http://localhost:3000/api/games');
+            if (!response.ok) {
+                throw new Error(`Error fetching games: ${response.statusText}`);
+            }
+            return await response.json();
+        }
+
+        function displayGames() {
+            const gameListElement = document.getElementById('game-list');
+            gameListElement.innerHTML = '';
+
+            const start = (currentPage - 1) * gamesPerPage;
+            const end = start + gamesPerPage;
+            const gamesToDisplay = filteredGames.slice(start, end);
+
+            gamesToDisplay.forEach(game => {
+                const gameCard = document.createElement('div');
+                gameCard.className = 'game-card';
+                gameCard.draggable = true;
+                gameCard.ondragstart = (event) => {
+                    event.dataTransfer.setData('text/plain', game.appid);
+                };
+                gameCard.innerHTML = `
+                    <h3><a href="https://store.steampowered.com/app/${game.appid}" target="_blank">${game.name}</a></h3>
+                    <p>App ID: ${game.appid}</p>
+                `;
+
+                const img = new Image();
+                img.src = `https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/header.jpg`;
+                img.onload = () => {
+                    gameCard.appendChild(img);
+                };
+                img.onerror = () => {
+                    const altImg = document.createElement('p');
+                    altImg.innerText = 'Image not available';
+                    gameCard.appendChild(altImg);
+                };
+
+                gameListElement.appendChild(gameCard);
+            });
+
+            updatePaginationControls();
+        }
+
+        function allowDrop(event) {
+            event.preventDefault();
+        }
+
+        function drop(event, category) {
+            event.preventDefault();
+            const appid = event.dataTransfer.getData('text/plain');
+            const game = games.find(g => g.appid === parseInt(appid));
+            if (game) {
+                addGameToCategory(game, category);
+            }
+        }
+
+        function addGameToCategory(game, categoryId) {
+            const category = document.getElementById(categoryId);
+            const gameCard = document.createElement('div');
+            gameCard.className = 'game-card';
+            gameCard.draggable = true;
+            gameCard.ondragstart = (event) => {
+                event.dataTransfer.setData('text/plain', game.appid);
+            };
+            gameCard.innerHTML = `
+                <h3><a href="https://store.steampowered.com/app/${game.appid}" target="_blank">${game.name}</a></h3>
+                <p>App ID: ${game.appid}</p>
+            `;
+            category.appendChild(gameCard);
+        }
+
+        function handleSearch() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            filteredGames = games.filter(game => game.name.toLowerCase().includes(searchTerm));
+            currentPage = 1;
+            displayGames();
+        }
+
+        function prevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                displayGames();
+            }
+        }
+
+        function nextPage() {
+            if (currentPage < Math.ceil(filteredGames.length / gamesPerPage)) {
+                currentPage++;
+                displayGames();
+            }
+        }
+
+        function updatePaginationControls() {
+            const prevButton = document.getElementById('prev-page');
+            const nextButton = document.getElementById('next-page');
+            const pageInfo = document.getElementById('page-info');
+
+            pageInfo.innerText = `Page ${currentPage}`;
+            prevButton.style.display = currentPage === 1 ? 'none' : 'inline';
+            nextButton.style.display = currentPage === Math.ceil(filteredGames.length / gamesPerPage) ? 'none' : 'inline';
+        }
+
+        window.onload = async () => {
+            try {
+                games = await fetchGames();
+                filteredGames = games;
+                displayGames();
+            } catch (error) {
+                console.error('Error fetching games:', error);
+            }
+        };
+    </script>
+
+</body>
+</html>
